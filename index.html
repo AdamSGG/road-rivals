@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Road Rivals</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --card: #16213e;
+    --card2: #0f3460;
+    --accent: #e94560;
+    --gold: #ffd700;
+    --green: #00d4aa;
+    --text: #eaeaea;
+    --muted: #8892a4;
+    --radius: 16px;
+    --shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; overflow: hidden; }
+
+  .screen { display: none; flex-direction: column; height: 100dvh; overflow: hidden; }
+  .screen.active { display: flex; }
+
+  /* ── Setup ────────────────────────────────── */
+  #setup { padding: 20px 16px; gap: 14px; background: linear-gradient(160deg, #1a1a2e 0%, #0f3460 100%); }
+
+  .logo-row { display: flex; align-items: center; gap: 10px; justify-content: center; padding-bottom: 4px; }
+  .logo-row h1 { font-size: 2rem; font-weight: 900; letter-spacing: -1px; }
+  .logo-row h1 span { color: var(--accent); }
+  .logo-row .flag { font-size: 2rem; }
+
+  .section-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+
+  .player-count-row { display: flex; gap: 8px; }
+  .count-btn { flex: 1; padding: 10px 4px; border-radius: 12px; border: 2px solid var(--card2); background: var(--card); color: var(--text); font-size: 1.1rem; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+  .count-btn.selected { background: var(--accent); border-color: var(--accent); color: white; transform: scale(1.05); }
+
+  .player-inputs { display: flex; flex-direction: column; gap: 8px; }
+  .player-input-row { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 12px; padding: 8px 12px; border: 2px solid var(--card2); transition: border-color 0.2s; }
+  .player-input-row:focus-within { border-color: var(--accent); }
+  .player-num { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: white; font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .player-input-row input { flex: 1; background: none; border: none; outline: none; color: var(--text); font-size: 1rem; font-weight: 600; }
+  .player-input-row input::placeholder { color: var(--muted); font-weight: 400; }
+
+  .saved-names { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+  .saved-chip { padding: 4px 10px; border-radius: 20px; background: var(--card2); font-size: 0.75rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
+  .saved-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  .start-btn { width: 100%; padding: 16px; border-radius: var(--radius); border: none; background: linear-gradient(135deg, var(--accent), #ff6b35); color: white; font-size: 1.2rem; font-weight: 800; cursor: pointer; box-shadow: var(--shadow); transition: transform 0.1s; }
+  .start-btn:active { transform: scale(0.98); }
+  .history-link { text-align: center; color: var(--muted); font-size: 0.85rem; cursor: pointer; text-decoration: underline; padding-bottom: 4px; }
+
+  /* ── Game ─────────────────────────────────── */
+  #game { padding: 0; }
+
+  .game-header { background: var(--card); padding: 10px 12px 8px; border-bottom: 1px solid var(--card2); flex-shrink: 0; }
+  .game-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .game-title { font-size: 1rem; font-weight: 800; color: var(--gold); letter-spacing: 1px; }
+  .game-timer { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+
+  .scores-row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .scores-row::-webkit-scrollbar { display: none; }
+  .score-card { flex: 1; min-width: 56px; background: var(--card2); border-radius: 10px; padding: 6px 4px; text-align: center; border: 2px solid transparent; transition: all 0.2s; cursor: pointer; }
+  .score-card.selected-player { border-color: var(--accent); background: rgba(233,69,96,0.15); }
+  .score-card .p-name { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .score-card .p-score { font-size: 1.5rem; font-weight: 900; line-height: 1.1; }
+  .score-card.selected-player .p-score { color: var(--accent); }
+  .score-card .p-rank { font-size: 0.65rem; color: var(--gold); min-height: 14px; }
+
+  /* First-score banner */
+  .first-score-bar {
+    background: linear-gradient(135deg, #92400e, #d97706, #f59e0b);
+    padding: 7px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #fff;
+    border-bottom: 2px solid rgba(0,0,0,0.2);
+    animation: pulseBar 2s ease-in-out infinite;
+  }
+  @keyframes pulseBar { 0%,100% { opacity: 1; } 50% { opacity: 0.85; } }
+  .first-score-bar .bar-left { display: flex; align-items: center; gap: 4px; }
+  .first-score-bar .bar-right { font-size: 0.7rem; background: rgba(0,0,0,0.25); padding: 3px 9px; border-radius: 20px; }
+
+  /* Car grid */
+  .car-grid-wrap { flex: 1; overflow-y: auto; padding: 8px 10px 4px; scrollbar-width: none; }
+  .car-grid-wrap::-webkit-scrollbar { display: none; }
+  .car-section-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin: 4px 0 6px; }
+  .car-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 8px; }
+
+  .car-btn {
+    border-radius: 14px;
+    border: 2px solid var(--card2);
+    background: var(--card);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    cursor: pointer;
+    transition: all 0.15s;
+    padding: 7px 4px 6px;
+    gap: 3px;
+    position: relative;
+    overflow: hidden;
+    min-height: 86px;
+  }
+  .car-btn:active { transform: scale(0.91); }
+
+  .car-btn.locked {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: grayscale(0.6);
+  }
+  .car-btn.locked:active { transform: none; }
+
+  /* White image tile inside dark card */
+  .car-img-wrap {
+    width: 46px;
+    height: 46px;
+    background: #ffffff;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .car-img-wrap img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+  .car-icon-wrap { width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; font-size: 2rem; flex-shrink: 0; }
+
+  .car-pts { font-size: 0.65rem; font-weight: 800; color: var(--gold); letter-spacing: 0.4px; text-align: center; line-height: 1.2; }
+  .car-pts.doubled { color: #fb923c; }
+  .car-name { font-size: 0.5rem; font-weight: 600; color: var(--muted); text-align: center; line-height: 1.1; }
+
+  .lock-badge { position: absolute; top: 4px; right: 4px; font-size: 0.75rem; }
+  .double-badge {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    font-size: 0.55rem;
+    font-weight: 900;
+    background: #ea580c;
+    color: white;
+    border-radius: 6px;
+    padding: 1px 4px;
+    line-height: 1.4;
+    letter-spacing: 0.3px;
+  }
+
+  /* Toolbar */
+  .game-toolbar { display: flex; gap: 8px; padding: 8px 10px; background: var(--card); border-top: 1px solid var(--card2); flex-shrink: 0; }
+  .tool-btn { flex: 1; padding: 10px 6px; border-radius: 12px; border: none; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: all 0.15s; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .tool-btn .t-icon { font-size: 1.2rem; }
+  .tool-btn:active { transform: scale(0.95); }
+  .btn-undo { background: var(--card2); color: var(--text); }
+  .btn-reset { background: rgba(234,179,8,0.15); color: #eab308; }
+  .btn-gameover { background: rgba(233,69,96,0.15); color: var(--accent); }
+
+  /* ── Scoring Modal ─────────────────────────── */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: flex-end; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--card); border-radius: 24px 24px 0 0; padding: 20px 16px 32px; width: 100%; max-width: 480px; animation: slideUp 0.25s ease; }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .modal-handle { width: 40px; height: 4px; border-radius: 2px; background: var(--card2); margin: 0 auto 16px; }
+  .modal-title { font-size: 1.1rem; font-weight: 800; text-align: center; margin-bottom: 10px; }
+
+  .modal-icon-area { text-align: center; margin-bottom: 8px; }
+  .modal-img-wrap { width: 64px; height: 64px; background: white; border-radius: 14px; display: flex; align-items: center; justify-content: center; padding: 5px; overflow: hidden; margin: 0 auto; }
+  .modal-img-wrap img { width: 100%; height: 100%; object-fit: contain; }
+  .modal-emoji { font-size: 3.2rem; line-height: 1; }
+
+  .first-score-badge {
+    background: linear-gradient(135deg, #b45309, #f59e0b);
+    color: white;
+    border-radius: 12px;
+    padding: 8px 14px;
+    text-align: center;
+    font-size: 0.82rem;
+    font-weight: 800;
+    margin-bottom: 12px;
+    letter-spacing: 0.3px;
+  }
+
+  .pts-row { display: flex; gap: 10px; margin-bottom: 16px; }
+  .pts-btn { flex: 1; padding: 13px 4px; border-radius: 14px; border: 2px solid var(--card2); background: var(--card2); color: var(--text); font-size: 1rem; font-weight: 800; cursor: pointer; text-align: center; transition: all 0.15s; line-height: 1.2; }
+  .pts-btn.selected { background: var(--accent); border-color: var(--accent); color: white; }
+  .pts-btn .pts-label { font-size: 0.58rem; font-weight: 600; color: rgba(255,255,255,0.55); display: block; margin-top: 3px; }
+  .pts-btn.selected .pts-label { color: rgba(255,255,255,0.75); }
+
+  .player-select-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .player-pick-btn { flex: 1; min-width: 80px; padding: 10px 6px; border-radius: 12px; border: 2px solid var(--card2); background: var(--card2); color: var(--text); font-size: 0.85rem; font-weight: 700; cursor: pointer; text-align: center; transition: all 0.15s; }
+  .player-pick-btn.selected { background: var(--green); border-color: var(--green); color: #0f2820; }
+
+  .modal-confirm { width: 100%; padding: 14px; border-radius: 14px; border: none; background: linear-gradient(135deg, var(--green), #00a87e); color: #0f2820; font-size: 1rem; font-weight: 800; cursor: pointer; transition: transform 0.1s; }
+  .modal-confirm:active { transform: scale(0.97); }
+  .modal-cancel { width: 100%; margin-top: 8px; padding: 10px; border-radius: 14px; border: none; background: none; color: var(--muted); font-size: 0.9rem; cursor: pointer; }
+
+  /* ── Celebration Overlay ───────────────────── */
+  .celebration-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 150;
+    pointer-events: none;
+    opacity: 0;
+    background: rgba(0,0,0,0.45);
+    transition: opacity 0.2s;
+  }
+  .celebration-overlay.show { opacity: 1; }
+
+  .celeb-card {
+    border-radius: 28px;
+    padding: 30px 36px;
+    text-align: center;
+    transform: scale(0) rotate(-6deg);
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 24px 70px rgba(0,0,0,0.6);
+    max-width: 78vw;
+  }
+  .celeb-card.first-spot {
+    background: linear-gradient(140deg, #b45309 0%, #d97706 40%, #fbbf24 100%);
+  }
+  .celeb-card.game-win {
+    background: linear-gradient(140deg, #1e3a5f 0%, #0f3460 40%, #1a5276 100%);
+    border: 3px solid var(--gold);
+  }
+  .celebration-overlay.show .celeb-card { transform: scale(1) rotate(0deg); }
+
+  .celeb-big { font-size: 3.5rem; line-height: 1; margin-bottom: 10px; }
+  .celeb-headline { font-size: 1.3rem; font-weight: 900; color: white; text-shadow: 0 2px 8px rgba(0,0,0,0.35); margin-bottom: 4px; letter-spacing: 0.5px; }
+  .celeb-player { font-size: 1rem; font-weight: 800; color: rgba(255,255,255,0.85); margin-bottom: 8px; }
+  .celeb-pts { font-size: 2.2rem; font-weight: 900; color: white; text-shadow: 0 3px 10px rgba(0,0,0,0.3); line-height: 1; }
+  .celeb-sub { font-size: 0.72rem; color: rgba(255,255,255,0.65); margin-top: 6px; letter-spacing: 0.3px; }
+
+  /* ── History ──────────────────────────────── */
+  #history { padding: 16px; gap: 12px; background: linear-gradient(160deg, #1a1a2e 0%, #0f3460 100%); }
+  .history-header { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .back-btn { width: 36px; height: 36px; border-radius: 50%; background: var(--card2); border: none; color: var(--text); font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .history-title { font-size: 1.2rem; font-weight: 800; }
+
+  .stats-row { display: flex; gap: 8px; flex-shrink: 0; }
+  .stat-card { flex: 1; background: var(--card); border-radius: 14px; padding: 12px 8px; text-align: center; border: 1px solid var(--card2); }
+  .stat-val { font-size: 1.6rem; font-weight: 900; color: var(--gold); }
+  .stat-lbl { font-size: 0.6rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+
+  .chart-wrap { background: var(--card); border-radius: 14px; padding: 14px 12px; flex-shrink: 0; border: 1px solid var(--card2); }
+  .chart-title { font-size: 0.7rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .bar-row { display: flex; flex-direction: column; gap: 6px; }
+  .bar-item { display: flex; align-items: center; gap: 8px; }
+  .bar-name { font-size: 0.75rem; font-weight: 700; width: 60px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { flex: 1; height: 16px; background: var(--card2); border-radius: 8px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 8px; background: linear-gradient(90deg, var(--accent), #ff6b35); transition: width 0.6s ease; }
+  .bar-val { font-size: 0.75rem; font-weight: 800; color: var(--gold); width: 28px; text-align: right; flex-shrink: 0; }
+
+  .games-scroll { flex: 1; overflow-y: auto; scrollbar-width: none; }
+  .games-scroll::-webkit-scrollbar { display: none; }
+  .game-log-item { background: var(--card); border-radius: 14px; padding: 12px; margin-bottom: 8px; border: 1px solid var(--card2); }
+  .log-date { font-size: 0.65rem; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+  .log-winner { font-size: 0.9rem; font-weight: 800; color: var(--gold); margin-bottom: 6px; }
+  .log-scores { display: flex; flex-wrap: wrap; gap: 4px; }
+  .log-chip { font-size: 0.7rem; font-weight: 600; padding: 3px 8px; border-radius: 20px; background: var(--card2); }
+  .log-chip.winner { background: rgba(255,215,0,0.15); color: var(--gold); }
+  .no-history { text-align: center; color: var(--muted); padding: 40px 20px; font-size: 0.9rem; }
+
+  /* ── Misc ──────────────────────────────────── */
+  #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 200; display: none; }
+
+  .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-80px); background: var(--green); color: #0f2820; font-weight: 800; font-size: 0.9rem; padding: 10px 20px; border-radius: 40px; z-index: 300; transition: transform 0.3s ease; white-space: nowrap; max-width: 90vw; text-align: center; }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.error { background: var(--accent); color: white; }
+
+  @keyframes scorePop { 0% { transform: scale(1); } 40% { transform: scale(1.3); } 100% { transform: scale(1); } }
+  .score-pop { animation: scorePop 0.3s ease; }
+</style>
+</head>
+<body>
+
+<canvas id="confetti-canvas"></canvas>
+<div class="toast" id="toast"></div>
+
+<!-- Celebration overlay (first-spot & game-over) -->
+<div class="celebration-overlay" id="celebOverlay">
+  <div class="celeb-card" id="celebCard">
+    <div class="celeb-big"    id="celebBig"></div>
+    <div class="celeb-headline" id="celebHeadline"></div>
+    <div class="celeb-player"  id="celebPlayer"></div>
+    <div class="celeb-pts"     id="celebPts"></div>
+    <div class="celeb-sub"     id="celebSub"></div>
+  </div>
+</div>
+
+<!-- ═══ SETUP SCREEN ═══ -->
+<div class="screen active" id="setup">
+  <div class="logo-row">
+    <span class="flag">🏁</span>
+    <h1>Road <span>Rivals</span></h1>
+    <span class="flag">🏁</span>
+  </div>
+  <div>
+    <div class="section-label">Number of Players</div>
+    <div class="player-count-row" id="countRow">
+      <button class="count-btn" data-n="2">2</button>
+      <button class="count-btn" data-n="3">3</button>
+      <button class="count-btn" data-n="4">4</button>
+      <button class="count-btn" data-n="5">5</button>
+    </div>
+  </div>
+  <div>
+    <div class="section-label">Player Names</div>
+    <div class="player-inputs" id="playerInputs"></div>
+    <div class="saved-names"   id="savedNames"></div>
+  </div>
+  <button class="start-btn" id="startBtn">🚦 START GAME</button>
+  <div class="history-link" id="goHistory">View Past Games &amp; Stats →</div>
+</div>
+
+<!-- ═══ GAME SCREEN ═══ -->
+<div class="screen" id="game">
+  <div class="game-header">
+    <div class="game-title-row">
+      <span class="game-title">🏁 ROAD RIVALS</span>
+      <span class="game-timer" id="gameTimer">00:00</span>
+    </div>
+    <div class="scores-row" id="scoresRow"></div>
+  </div>
+
+  <!-- Gold banner — visible only until first score -->
+  <div class="first-score-bar" id="firstScoreBar">
+    <div class="bar-left">🎯 FIRST SPOT = <strong>&nbsp;2× POINTS!</strong></div>
+    <div class="bar-right">⚡ Tesla locked</div>
+  </div>
+
+  <div class="car-grid-wrap">
+    <div class="car-section-label">Spot a car — tap to score!</div>
+    <div class="car-grid" id="carGrid"></div>
+    <div class="car-section-label">Emergency Vehicles</div>
+    <div class="car-grid" id="emergencyGrid"></div>
+  </div>
+
+  <div class="game-toolbar">
+    <button class="tool-btn btn-undo"     id="undoBtn"><span class="t-icon">↩️</span><span>Undo</span></button>
+    <button class="tool-btn btn-reset"    id="resetBtn"><span class="t-icon">🔄</span><span>Reset</span></button>
+    <button class="tool-btn btn-gameover" id="gameoverBtn"><span class="t-icon">🏆</span><span>Game Over</span></button>
+  </div>
+</div>
+
+<!-- ═══ HISTORY SCREEN ═══ -->
+<div class="screen" id="history">
+  <div class="history-header">
+    <button class="back-btn" id="backBtn">←</button>
+    <span class="history-title">Stats &amp; History</span>
+  </div>
+  <div class="stats-row"  id="statsRow"></div>
+  <div class="chart-wrap">
+    <div class="chart-title">🏆 All-Time Wins</div>
+    <div class="bar-row" id="barChart"></div>
+  </div>
+  <div class="games-scroll" id="gamesList"></div>
+</div>
+
+<!-- ═══ SCORING MODAL ═══ -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-icon-area" id="modalIcon"></div>
+    <div class="modal-title"     id="modalTitle"></div>
+    <div class="first-score-badge" id="firstScoreBadge" style="display:none;">⚡ FIRST SPOT — 2× multiplier active!</div>
+
+    <!-- Emergency pts picker -->
+    <div id="ptsSection" style="display:none;">
+      <div class="section-label" style="text-align:center;margin-bottom:6px;">Points</div>
+      <div class="pts-row">
+        <div class="pts-btn" data-pts="1">1 pt<span class="pts-label">No lights</span></div>
+        <div class="pts-btn" data-pts="2">2 pts<span class="pts-label">Lights only</span></div>
+        <div class="pts-btn" data-pts="3">3 pts<span class="pts-label">Lights + siren</span></div>
+      </div>
+    </div>
+
+    <div class="section-label" style="text-align:center;margin-bottom:6px;">Who spotted it?</div>
+    <div class="player-select-grid" id="playerGrid"></div>
+
+    <button class="modal-confirm" id="modalConfirm">✔ Add Points</button>
+    <button class="modal-cancel"  id="modalCancel">Cancel</button>
+  </div>
+</div>
+
+<script>
+const CARS = [
+  { id:'tesla',  img:'assets/tesla.png',         name:'Tesla',       pts:1, color:'#e82127' },
+  { id:'green',  img:'assets/green-bean.png',    name:'Green Bean',  pts:2, color:'#22c55e' },
+  { id:'pink',   img:'assets/pink-panther.jpeg', name:'Pink Panther',pts:5, color:'#ff69b4' },
+  { id:'buggy',  img:'assets/punch-buggy.jpeg',  name:'Punch Buggy', pts:3, color:'#3b82f6' },
+  { id:'mini',   icon:'🎩',                      name:'Pinch Mini',  pts:2, color:'#f59e0b' },
+];
+const EMERGENCY = [
+  { id:'police',    icon:'🚔', name:'Police'    },
+  { id:'fire',      icon:'🚒', name:'Fire Truck' },
+  { id:'ambulance', icon:'🚑', name:'Ambulance'  },
+];
+
+let state = {
+  players: [], scores: {}, moves: [],
+  selectedPlayer: null,
+  startTime: null, timerInterval: null,
+  isFirstScore: true,
+  history: [],
+};
+
+// ── Persistence ────────────────────────────────
+function saveHistory() { localStorage.setItem('rr_history', JSON.stringify(state.history)); }
+
+function loadHistory() {
+  try { state.history = JSON.parse(localStorage.getItem('rr_history') || '[]'); }
+  catch { state.history = []; }
+}
+
+function savedNames() {
+  const all = state.history.flatMap(g => g.scores.map(s => s.name));
+  return [...new Set(all)].slice(0, 20);
+}
+
+// ── Setup ──────────────────────────────────────
+let numPlayers = 2;
+let focusedInput = null;
+
+function initSetup() {
+  loadHistory();
+  document.querySelector('.count-btn').classList.add('selected');
+  renderPlayerInputs();
+
+  document.getElementById('countRow').addEventListener('click', e => {
+    const btn = e.target.closest('.count-btn');
+    if (!btn) return;
+    numPlayers = +btn.dataset.n;
+    document.querySelectorAll('.count-btn').forEach(b => b.classList.toggle('selected', b === btn));
+    renderPlayerInputs();
+  });
+
+  document.getElementById('startBtn').addEventListener('click', startGame);
+  document.getElementById('goHistory').addEventListener('click', () => { renderHistory(); showScreen('history'); });
+  document.getElementById('backBtn').addEventListener('click', () => showScreen('setup'));
+}
+
+function renderPlayerInputs() {
+  const wrap = document.getElementById('playerInputs');
+  const prev = [...wrap.querySelectorAll('input')].map(i => i.value);
+  wrap.innerHTML = '';
+
+  for (let i = 0; i < numPlayers; i++) {
+    const row = document.createElement('div');
+    row.className = 'player-input-row';
+    row.innerHTML = `<div class="player-num">${i+1}</div><input type="text" placeholder="Player ${i+1}" maxlength="12" value="${prev[i]||''}">`;
+    wrap.appendChild(row);
+    row.querySelector('input').addEventListener('focus', e => { focusedInput = e.target; });
+  }
+
+  const namesWrap = document.getElementById('savedNames');
+  namesWrap.innerHTML = '';
+  savedNames().forEach(name => {
+    const chip = document.createElement('div');
+    chip.className = 'saved-chip';
+    chip.textContent = name;
+    chip.addEventListener('click', () => {
+      const target = focusedInput || [...wrap.querySelectorAll('input')].find(i => !i.value);
+      if (target) { target.value = name; target.blur(); }
+    });
+    namesWrap.appendChild(chip);
+  });
+}
+
+// ── Game Start ─────────────────────────────────
+function startGame() {
+  const names = [...document.querySelectorAll('#playerInputs input')]
+    .map((inp, i) => inp.value.trim() || `Player ${i+1}`);
+
+  state.players = names;
+  state.scores = Object.fromEntries(names.map(n => [n, 0]));
+  state.moves = [];
+  state.isFirstScore = true;
+  state.selectedPlayer = names[0];
+  state.startTime = Date.now();
+
+  document.getElementById('firstScoreBar').style.display = '';
+  renderGame();
+  startTimer();
+  showScreen('game');
+}
+
+// ── Timer ──────────────────────────────────────
+function startTimer() {
+  clearInterval(state.timerInterval);
+  state.timerInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - state.startTime) / 1000);
+    document.getElementById('gameTimer').textContent =
+      `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+  }, 1000);
+}
+
+// ── Render ─────────────────────────────────────
+function renderGame() { renderScores(); renderCarGrid(); renderEmergencyGrid(); }
+
+function renderScores() {
+  const row = document.getElementById('scoresRow');
+  row.innerHTML = '';
+  const sorted = [...state.players].sort((a,b) => state.scores[b] - state.scores[a]);
+
+  state.players.forEach(name => {
+    const rank = sorted.indexOf(name) + 1;
+    const card = document.createElement('div');
+    card.className = 'score-card' + (name === state.selectedPlayer ? ' selected-player' : '');
+    card.dataset.player = name;
+    card.innerHTML = `
+      <div class="p-name">${name}</div>
+      <div class="p-score">${state.scores[name]}</div>
+      <div class="p-rank">${rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':''}</div>`;
+    card.addEventListener('click', () => { state.selectedPlayer = name; renderScores(); });
+    row.appendChild(card);
+  });
+}
+
+function renderCarGrid() {
+  const grid = document.getElementById('carGrid');
+  grid.innerHTML = '';
+
+  CARS.forEach(car => {
+    const locked = car.id === 'tesla' && state.isFirstScore;
+    const dispPts = state.isFirstScore ? car.pts * 2 : car.pts;
+    const btn = document.createElement('div');
+    btn.className = 'car-btn' + (locked ? ' locked' : '');
+    btn.style.borderColor = car.color;
+
+    const iconHtml = car.img
+      ? `<div class="car-img-wrap"><img src="${car.img}" alt="${car.name}" loading="lazy"></div>`
+      : `<div class="car-icon-wrap">${car.icon}</div>`;
+
+    btn.innerHTML = `
+      ${iconHtml}
+      <div class="car-pts${state.isFirstScore?' doubled':''}">${locked?'🔒 locked':'+'+dispPts+'pt'+(dispPts!==1?'s':'')}</div>
+      <div class="car-name">${car.name}</div>
+      ${locked ? '' : state.isFirstScore ? '<div class="double-badge">2×</div>' : ''}`;
+
+    if (!locked) btn.addEventListener('click', () => openModal(car, false));
+    grid.appendChild(btn);
+  });
+}
+
+function renderEmergencyGrid() {
+  const grid = document.getElementById('emergencyGrid');
+  grid.innerHTML = '';
+
+  EMERGENCY.forEach(car => {
+    const btn = document.createElement('div');
+    btn.className = 'car-btn';
+    btn.style.borderColor = '#6366f1';
+    const ptsText = state.isFirstScore ? '2-6 pts' : '1-3 pts';
+    btn.innerHTML = `
+      <div class="car-icon-wrap">${car.icon}</div>
+      <div class="car-pts${state.isFirstScore?' doubled':''}">${ptsText}</div>
+      <div class="car-name">${car.name}</div>
+      ${state.isFirstScore ? '<div class="double-badge">2×</div>' : ''}`;
+    btn.addEventListener('click', () => openModal(car, true));
+    grid.appendChild(btn);
+  });
+}
+
+// ── Modal ──────────────────────────────────────
+let modal = { car: null, pts: null, player: null, isEmergency: false };
+
+function openModal(car, isEmergency) {
+  modal = { car, pts: isEmergency ? null : car.pts, player: state.selectedPlayer, isEmergency };
+
+  // Icon
+  const iconEl = document.getElementById('modalIcon');
+  iconEl.innerHTML = car.img
+    ? `<div class="modal-img-wrap"><img src="${car.img}" alt="${car.name}"></div>`
+    : `<div class="modal-emoji">${car.icon}</div>`;
+
+  document.getElementById('modalTitle').textContent = car.name;
+  document.getElementById('firstScoreBadge').style.display = state.isFirstScore ? 'block' : 'none';
+
+  const ptsSection = document.getElementById('ptsSection');
+  ptsSection.style.display = isEmergency ? 'block' : 'none';
+
+  if (isEmergency) {
+    // Update pts-btn labels to show doubled values when first score
+    document.querySelectorAll('.pts-btn').forEach(b => {
+      b.classList.remove('selected');
+      const base = +b.dataset.pts;
+      const disp = state.isFirstScore ? base * 2 : base;
+      const labels = ['No lights', 'Lights only', 'Lights + siren'];
+      b.innerHTML = `${disp} pt${disp!==1?'s':''}<span class="pts-label">${labels[base-1]}</span>`;
+    });
+    modal.pts = null;
+  }
+
+  // Player buttons
+  const pgrid = document.getElementById('playerGrid');
+  pgrid.innerHTML = '';
+  state.players.forEach(name => {
+    const btn = document.createElement('div');
+    btn.className = 'player-pick-btn' + (name === modal.player ? ' selected' : '');
+    btn.textContent = name;
+    btn.addEventListener('click', () => {
+      modal.player = name;
+      pgrid.querySelectorAll('.player-pick-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+    pgrid.appendChild(btn);
+  });
+
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+// pts-btn selection — reads data-pts (original 1/2/3), addScore doubles if needed
+document.querySelectorAll('.pts-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    modal.pts = +btn.dataset.pts;
+    document.querySelectorAll('.pts-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+  });
+});
+
+document.getElementById('modalConfirm').addEventListener('click', () => {
+  if (!modal.player) { showToast('Pick a player!', true); return; }
+  if (modal.isEmergency && !modal.pts) { showToast('Pick the points level!', true); return; }
+  addScore(modal.player, modal.pts, modal.car);
+  closeModal();
+});
+
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+document.getElementById('modalCancel').addEventListener('click', closeModal);
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target.id === 'modalOverlay') closeModal();
+});
+
+// ── Scoring ────────────────────────────────────
+function addScore(player, basePts, car) {
+  const wasFirst = state.isFirstScore;
+  const actualPts = wasFirst ? basePts * 2 : basePts;
+
+  if (wasFirst) {
+    state.isFirstScore = false;
+    document.getElementById('firstScoreBar').style.display = 'none';
+    renderCarGrid();
+    renderEmergencyGrid();
+    showFirstSpotCelebration(player, basePts, actualPts, car);
+  }
+
+  state.scores[player] += actualPts;
+  state.moves.push({ player, pts: actualPts, wasFirst });
+
+  renderScores();
+  animateScore(player);
+  if (!wasFirst) showToast(`${car.icon||'🚗'} +${actualPts}pt${actualPts!==1?'s':''} → ${player}`);
+}
+
+function animateScore(player) {
+  const cards = document.querySelectorAll('.score-card');
+  const card = [...cards].find(c => c.dataset.player === player);
+  const el = card && card.querySelector('.p-score');
+  if (el) { el.classList.remove('score-pop'); void el.offsetWidth; el.classList.add('score-pop'); }
+}
+
+// ── Undo ───────────────────────────────────────
+document.getElementById('undoBtn').addEventListener('click', () => {
+  if (!state.moves.length) { showToast('Nothing to undo!', true); return; }
+  const last = state.moves.pop();
+  state.scores[last.player] = Math.max(0, state.scores[last.player] - last.pts);
+  if (last.wasFirst) {
+    state.isFirstScore = true;
+    document.getElementById('firstScoreBar').style.display = '';
+    renderCarGrid();
+    renderEmergencyGrid();
+  }
+  renderScores();
+  showToast(`↩ ${last.pts}pt${last.pts!==1?'s':''} removed from ${last.player}`);
+});
+
+// ── Reset ──────────────────────────────────────
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (!confirm('Reset all scores? This will not save the game.')) return;
+  state.players.forEach(n => state.scores[n] = 0);
+  state.moves = [];
+  state.isFirstScore = true;
+  state.startTime = Date.now();
+  document.getElementById('firstScoreBar').style.display = '';
+  renderGame();
+  showToast('Scores reset!');
+});
+
+// ── Game Over ──────────────────────────────────
+document.getElementById('gameoverBtn').addEventListener('click', () => {
+  if (!confirm('End game and save to history?')) return;
+  const duration = Math.round((Date.now() - state.startTime) / 1000);
+  const winner = [...state.players].sort((a,b) => state.scores[b]-state.scores[a])[0];
+
+  state.history.unshift({
+    date: new Date().toISOString(),
+    duration,
+    winner,
+    scores: state.players.map(n => ({ name: n, score: state.scores[n] })),
+  });
+  saveHistory();
+  clearInterval(state.timerInterval);
+
+  showConfetti();
+  showWinCelebration(winner, state.scores[winner]);
+});
+
+// ── Celebrations ───────────────────────────────
+function showFirstSpotCelebration(player, base, doubled, car) {
+  const card = document.getElementById('celebCard');
+  card.className = 'celeb-card first-spot';
+  document.getElementById('celebBig').innerHTML = car.img
+    ? `<img src="${car.img}" style="width:56px;height:56px;object-fit:contain;background:#fff;border-radius:12px;padding:4px;">`
+    : car.icon;
+  document.getElementById('celebHeadline').textContent = '🎯 FIRST SPOT!';
+  document.getElementById('celebPlayer').textContent = player;
+  document.getElementById('celebPts').textContent = `+${doubled} POINTS!`;
+  document.getElementById('celebSub').textContent = `${base}pt × 2 bonus applied`;
+
+  showCelebration(2600);
+  showConfetti();
+}
+
+function showWinCelebration(winner, pts) {
+  const card = document.getElementById('celebCard');
+  card.className = 'celeb-card game-win';
+  document.getElementById('celebBig').textContent = '🏆';
+  document.getElementById('celebHeadline').textContent = 'GAME OVER!';
+  document.getElementById('celebPlayer').textContent = `${winner} WINS!`;
+  document.getElementById('celebPts').textContent = `${pts} points`;
+  document.getElementById('celebSub').textContent = 'Game saved to history';
+
+  showCelebration(3000, () => { showScreen('history'); renderHistory(); });
+}
+
+function showCelebration(duration, callback) {
+  const overlay = document.getElementById('celebOverlay');
+  overlay.classList.add('show');
+  setTimeout(() => {
+    overlay.classList.remove('show');
+    if (callback) setTimeout(callback, 200);
+  }, duration);
+}
+
+// ── History ────────────────────────────────────
+function renderHistory() {
+  loadHistory();
+  const totalGames = state.history.length;
+  const allPlayers = [...new Set(state.history.flatMap(g => g.scores.map(s => s.name)))];
+  const longestGame = state.history.reduce((m,g) => Math.max(m, g.duration), 0);
+
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card"><div class="stat-val">${totalGames}</div><div class="stat-lbl">Games</div></div>
+    <div class="stat-card"><div class="stat-val">${allPlayers.length}</div><div class="stat-lbl">Players</div></div>
+    <div class="stat-card"><div class="stat-val">${Math.floor(longestGame/60)}:${String(longestGame%60).padStart(2,'0')}</div><div class="stat-lbl">Longest</div></div>`;
+
+  const wins = {};
+  state.history.forEach(g => { wins[g.winner] = (wins[g.winner]||0) + 1; });
+  const maxW = Math.max(...Object.values(wins), 1);
+  const sorted = Object.entries(wins).sort((a,b)=>b[1]-a[1]).slice(0,6);
+
+  document.getElementById('barChart').innerHTML = sorted.length === 0
+    ? '<div style="color:var(--muted);font-size:0.8rem;text-align:center;">No games yet</div>'
+    : sorted.map(([name,w]) => `
+      <div class="bar-item">
+        <div class="bar-name">${name}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.round(w/maxW*100)}%"></div></div>
+        <div class="bar-val">${w}</div>
+      </div>`).join('');
+
+  const list = document.getElementById('gamesList');
+  if (!state.history.length) {
+    list.innerHTML = '<div class="no-history">No games recorded yet.<br>Finish a game to see history here!</div>';
+    return;
+  }
+  list.innerHTML = state.history.map(g => {
+    const d = new Date(g.date);
+    const dateStr = d.toLocaleDateString('en-AU', {weekday:'short',day:'numeric',month:'short',year:'numeric'});
+    const dur = `${Math.floor(g.duration/60)}m ${g.duration%60}s`;
+    const sortedScores = [...g.scores].sort((a,b)=>b.score-a.score);
+    return `<div class="game-log-item">
+      <div class="log-date">${dateStr} · ${dur}</div>
+      <div class="log-winner">🏆 ${g.winner}</div>
+      <div class="log-scores">${sortedScores.map(s=>`<span class="log-chip ${s.name===g.winner?'winner':''}">${s.name}: ${s.score}</span>`).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Navigation ─────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ── Toast ──────────────────────────────────────
+let toastTimer;
+function showToast(msg, isError=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isError?' error':'') + ' show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ── Confetti ───────────────────────────────────
+function showConfetti() {
+  const canvas = document.getElementById('confetti-canvas');
+  canvas.style.display = 'block';
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  const pieces = Array.from({length:130}, () => ({
+    x: Math.random()*canvas.width, y: -20,
+    r: Math.random()*8+4, d: Math.random()*80,
+    color: ['#e94560','#ffd700','#00d4aa','#ff6b35','#3b82f6','#ff69b4','#a78bfa'][Math.floor(Math.random()*7)],
+    tiltAngle: 0, tiltSpeed: Math.random()*0.07+0.05,
+  }));
+
+  let frame = 0;
+  (function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    pieces.forEach(p => {
+      p.tiltAngle += p.tiltSpeed;
+      p.y += Math.cos(frame/20 + p.d)*2 + 2;
+      p.x += Math.sin(frame/20)*1.5;
+      const tilt = Math.sin(p.tiltAngle)*12;
+      ctx.beginPath();
+      ctx.fillStyle = p.color;
+      ctx.ellipse(p.x+tilt, p.y, p.r, p.r*0.5, tilt*Math.PI/180, 0, 2*Math.PI);
+      ctx.fill();
+    });
+    frame++;
+    if (frame < 160) requestAnimationFrame(animate);
+    else canvas.style.display = 'none';
+  })();
+}
+
+initSetup();
+</script>
+</body>
+</html>

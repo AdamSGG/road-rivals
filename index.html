@@ -385,10 +385,11 @@
       </div>
     </div>
 
-    <div class="section-label" style="text-align:center;margin-bottom:6px;">Who spotted it?</div>
-    <div class="player-select-grid" id="playerGrid"></div>
+    <div id="playerSection" style="display:none;">
+      <div class="section-label" style="text-align:center;margin-bottom:6px;">Who spotted it?</div>
+      <div class="player-select-grid" id="playerGrid"></div>
+    </div>
 
-    <button class="modal-confirm" id="modalConfirm">✔ Add Points</button>
     <button class="modal-cancel"  id="modalCancel">Cancel</button>
   </div>
 </div>
@@ -399,7 +400,7 @@ const CARS = [
   { id:'green',  img:'assets/green-bean.png',    name:'Green Bean',  pts:2, color:'#22c55e' },
   { id:'pink',   img:'assets/pink-panther.jpeg', name:'Pink Panther',pts:5, color:'#ff69b4' },
   { id:'buggy',  img:'assets/punch-buggy.jpeg',  name:'Punch Buggy', pts:3, color:'#3b82f6' },
-  { id:'mini',   icon:'🎩',                      name:'Pinch Mini',  pts:2, color:'#f59e0b' },
+  { id:'mini',   img:'assets/mini.jpeg',          name:'Pinch Mini',  pts:2, color:'#f59e0b' },
 ];
 const EMERGENCY = [
   { id:'police',    icon:'🚔', name:'Police'    },
@@ -573,12 +574,28 @@ function renderEmergencyGrid() {
 }
 
 // ── Modal ──────────────────────────────────────
-let modal = { car: null, pts: null, player: null, isEmergency: false };
+let modal = { car: null, pts: null, isEmergency: false };
+
+function buildPlayerGrid() {
+  const pgrid = document.getElementById('playerGrid');
+  pgrid.innerHTML = '';
+  state.players.forEach(name => {
+    const btn = document.createElement('div');
+    btn.className = 'player-pick-btn' + (name === state.selectedPlayer ? ' selected' : '');
+    btn.textContent = name;
+    btn.addEventListener('click', () => {
+      state.selectedPlayer = name;
+      addScore(name, modal.pts, modal.car);
+      closeModal();
+    });
+    pgrid.appendChild(btn);
+  });
+  document.getElementById('playerSection').style.display = 'block';
+}
 
 function openModal(car, isEmergency) {
-  modal = { car, pts: isEmergency ? null : car.pts, player: state.selectedPlayer, isEmergency };
+  modal = { car, pts: isEmergency ? null : car.pts, isEmergency };
 
-  // Icon
   const iconEl = document.getElementById('modalIcon');
   iconEl.innerHTML = car.img
     ? `<div class="modal-img-wrap"><img src="${car.img}" alt="${car.name}"></div>`
@@ -586,12 +603,11 @@ function openModal(car, isEmergency) {
 
   document.getElementById('modalTitle').textContent = car.name;
   document.getElementById('firstScoreBadge').style.display = state.isFirstScore ? 'block' : 'none';
+  document.getElementById('playerSection').style.display = 'none';
 
   const ptsSection = document.getElementById('ptsSection');
-  ptsSection.style.display = isEmergency ? 'block' : 'none';
-
   if (isEmergency) {
-    // Update pts-btn labels to show doubled values when first score
+    ptsSection.style.display = 'block';
     document.querySelectorAll('.pts-btn').forEach(b => {
       b.classList.remove('selected');
       const base = +b.dataset.pts;
@@ -599,41 +615,22 @@ function openModal(car, isEmergency) {
       const labels = ['No lights', 'Lights only', 'Lights + siren'];
       b.innerHTML = `${disp} pt${disp!==1?'s':''}<span class="pts-label">${labels[base-1]}</span>`;
     });
-    modal.pts = null;
+  } else {
+    ptsSection.style.display = 'none';
+    buildPlayerGrid();
   }
-
-  // Player buttons
-  const pgrid = document.getElementById('playerGrid');
-  pgrid.innerHTML = '';
-  state.players.forEach(name => {
-    const btn = document.createElement('div');
-    btn.className = 'player-pick-btn' + (name === modal.player ? ' selected' : '');
-    btn.textContent = name;
-    btn.addEventListener('click', () => {
-      modal.player = name;
-      pgrid.querySelectorAll('.player-pick-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-    });
-    pgrid.appendChild(btn);
-  });
 
   document.getElementById('modalOverlay').classList.add('open');
 }
 
-// pts-btn selection — reads data-pts (original 1/2/3), addScore doubles if needed
+// pts-btn: select pts then reveal player grid
 document.querySelectorAll('.pts-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     modal.pts = +btn.dataset.pts;
     document.querySelectorAll('.pts-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
+    buildPlayerGrid();
   });
-});
-
-document.getElementById('modalConfirm').addEventListener('click', () => {
-  if (!modal.player) { showToast('Pick a player!', true); return; }
-  if (modal.isEmergency && !modal.pts) { showToast('Pick the points level!', true); return; }
-  addScore(modal.player, modal.pts, modal.car);
-  closeModal();
 });
 
 function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
@@ -642,8 +639,29 @@ document.getElementById('modalOverlay').addEventListener('click', e => {
   if (e.target.id === 'modalOverlay') closeModal();
 });
 
+// ── Horn ───────────────────────────────────────
+function playHonk() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.22].forEach(t => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.type = 'sawtooth'; osc.frequency.value = 370;
+      g.gain.setValueAtTime(0.001, ctx.currentTime + t);
+      g.gain.linearRampToValueAtTime(0.2, ctx.currentTime + t + 0.02);
+      g.gain.setValueAtTime(0.2, ctx.currentTime + t + 0.14);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.18);
+      osc.start(ctx.currentTime + t);
+      osc.stop(ctx.currentTime + t + 0.2);
+    });
+    setTimeout(() => ctx.close(), 600);
+  } catch(e) {}
+}
+
 // ── Scoring ────────────────────────────────────
 function addScore(player, basePts, car) {
+  playHonk();
   const wasFirst = state.isFirstScore;
   const actualPts = wasFirst ? basePts * 2 : basePts;
 
@@ -699,6 +717,7 @@ document.getElementById('resetBtn').addEventListener('click', () => {
 
 // ── Game Over ──────────────────────────────────
 document.getElementById('gameoverBtn').addEventListener('click', () => {
+  if (!state.players.length || state.startTime === null) { showToast('Start a game first!', true); return; }
   if (!confirm('End game and save to history?')) return;
   const duration = Math.round((Date.now() - state.startTime) / 1000);
   const winner = [...state.players].sort((a,b) => state.scores[b]-state.scores[a])[0];

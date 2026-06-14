@@ -424,7 +424,7 @@ function initSetup() {
   });
   document.getElementById('startBtn').addEventListener('click', startGame);
   document.getElementById('goHistory').addEventListener('click', ()=>{ renderHistory(); showScreen('history'); });
-  document.getElementById('backBtn').addEventListener('click', ()=>showScreen('setup'));
+  document.getElementById('backBtn').addEventListener('click', ()=>{ loadHistory(); renderPlayerInputs(); showScreen('setup'); });
 }
 
 function renderPlayerInputs() {
@@ -456,8 +456,8 @@ function startGame() {
   state.moves=[]; state.isFirstScore=true;
   state.selectedPlayer=names[0];
   state.startTime=Date.now();
+  _gameEnded=false; _scoringLock=false; _resetTap=0;
   document.getElementById('firstScoreBar').style.display='';
-  // Request persistent storage so data survives browser cleanup on iOS
   if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();
   renderGame(); startTimer(); showScreen('game');
 }
@@ -520,6 +520,7 @@ function renderEmergencyGrid() {
 
 // ── Modal ────────────────────────────────────────
 let modal={car:null,pts:null,isEmergency:false};
+let _gameEnded=false, _scoringLock=false, _resetTap=0;
 
 function buildPlayerGrid() {
   const pg=document.getElementById('playerGrid'); pg.innerHTML='';
@@ -527,7 +528,12 @@ function buildPlayerGrid() {
     const btn=document.createElement('div');
     btn.className='player-pick-btn'+(name===state.selectedPlayer?' selected':'');
     btn.textContent=name;
-    btn.addEventListener('click',()=>{ state.selectedPlayer=name; addScore(name,modal.pts,modal.car); closeModal(); });
+    btn.addEventListener('click',()=>{
+      if(_scoringLock) return;
+      _scoringLock=true;
+      state.selectedPlayer=name; addScore(name,modal.pts,modal.car); closeModal();
+      setTimeout(()=>{ _scoringLock=false; },800);
+    });
     pg.appendChild(btn);
   });
   document.getElementById('playerSection').style.display='block';
@@ -645,20 +651,28 @@ document.getElementById('undoBtn').addEventListener('click',()=>{
 
 document.getElementById('resetBtn').addEventListener('click',()=>{
   if(!state.players.length||state.startTime===null){showToast('Start a game first!',true);return;}
-  if(!confirm('Reset all scores? This will not save the game.')) return;
-  state.players.forEach(n=>state.scores[n]=0);
-  state.moves=[]; state.isFirstScore=true; state.startTime=Date.now();
-  document.getElementById('firstScoreBar').style.display='';
-  renderGame(); showToast('Scores reset!');
+  if(Date.now()-_resetTap<3000){
+    _resetTap=0;
+    state.players.forEach(n=>state.scores[n]=0);
+    state.moves=[]; state.isFirstScore=true; state.startTime=Date.now();
+    document.getElementById('firstScoreBar').style.display='';
+    renderGame(); showToast('Scores reset!');
+  } else {
+    _resetTap=Date.now();
+    showToast('Tap Reset again to confirm',true);
+  }
 });
 
 document.getElementById('gameoverBtn').addEventListener('click',()=>{
   if(!state.players.length||state.startTime===null){showToast('Start a game first!',true);return;}
-  if(!confirm('End game and save to history?')) return;
+  if(_gameEnded) return;
+  _gameEnded=true;
   const duration=Math.round((Date.now()-state.startTime)/1000);
+  state.startTime=null;
+  clearInterval(state.timerInterval);
   const winner=[...state.players].sort((a,b)=>state.scores[b]-state.scores[a])[0];
   state.history.unshift({date:new Date().toISOString(),duration,winner,scores:state.players.map(n=>({name:n,score:state.scores[n]}))});
-  saveHistory(); clearInterval(state.timerInterval);
+  saveHistory();
   showConfetti(); showWinCelebration(winner,state.scores[winner]);
 });
 
@@ -738,7 +752,9 @@ function showToast(msg,isError=false){
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
 }
 
+let _confettiRaf=null;
 function showConfetti(){
+  if(_confettiRaf!==null){ cancelAnimationFrame(_confettiRaf); _confettiRaf=null; }
   const canvas=document.getElementById('confetti-canvas');
   canvas.style.display='block';
   const ctx=canvas.getContext('2d');
@@ -758,8 +774,8 @@ function showConfetti(){
       ctx.ellipse(p.x+tilt,p.y,p.r,p.r*.5,tilt*Math.PI/180,0,2*Math.PI); ctx.fill();
     });
     frame++;
-    if(frame<160) requestAnimationFrame(animate);
-    else canvas.style.display='none';
+    if(frame<160){ _confettiRaf=requestAnimationFrame(animate); }
+    else { _confettiRaf=null; canvas.style.display='none'; }
   })();
 }
 

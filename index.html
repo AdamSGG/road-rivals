@@ -117,13 +117,12 @@
   .car-btn.locked { opacity: .4; cursor: not-allowed; filter: grayscale(.6); }
   .car-btn.locked:active { transform: none; }
 
-  /* Images: no white wrapper, displayed directly */
+  /* Images: transparent background, fills frame */
   .car-img {
-    width: 70%;
-    height: 65%;
+    width: 86%;
+    height: 76%;
     object-fit: contain;
     display: block;
-    border-radius: 6px;
     flex-shrink: 0;
   }
   .car-icon-wrap { font-size: 2.2rem; line-height: 1; flex-shrink: 0; }
@@ -179,7 +178,7 @@
     .car-section-label { font-size: .56rem; margin: 2px 0 3px; }
 
     /* Smaller images/icons in landscape */
-    .car-img { width: 65%; height: 60%; }
+    .car-img { width: 78%; height: 70%; }
     .car-icon-wrap { font-size: 1.6rem; }
     .car-pts  { font-size: .6rem; }
     .car-name { font-size: .44rem; }
@@ -203,7 +202,7 @@
   .modal-handle { width: 40px; height: 4px; border-radius: 2px; background: var(--card2); margin: 0 auto 16px; }
   .modal-title { font-size: 1.1rem; font-weight: 800; text-align: center; margin-bottom: 10px; }
   .modal-icon-area { text-align: center; margin-bottom: 8px; }
-  .modal-big-img { width: 72px; height: 72px; object-fit: contain; display: block; margin: 0 auto; border-radius: 8px; }
+  .modal-big-img { width: 80px; height: 80px; object-fit: contain; display: block; margin: 0 auto; }
   .modal-emoji { font-size: 3.2rem; line-height: 1; }
   .first-score-badge { background: linear-gradient(135deg,#b45309,#f59e0b); color: white; border-radius: 12px; padding: 8px 14px; text-align: center; font-size: .82rem; font-weight: 800; margin-bottom: 12px; }
   .pts-row { display: flex; gap: 10px; margin-bottom: 16px; }
@@ -255,6 +254,8 @@
   .log-chip { font-size: .7rem; font-weight: 600; padding: 3px 8px; border-radius: 20px; background: var(--card2); }
   .log-chip.winner { background: rgba(255,215,0,.15); color: var(--gold); }
   .no-history { text-align: center; color: var(--muted); padding: 40px 20px; font-size: .9rem; }
+  .history-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .history-action-btn { flex: 1; padding: 9px 4px; border-radius: 12px; border: 1px solid var(--card2); background: var(--card); color: var(--text); font-size: .78rem; font-weight: 700; cursor: pointer; }
 
   /* ── Misc ────────────────────────────────────*/
   #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 200; display: none; }
@@ -342,6 +343,10 @@
     <span class="history-title">Stats &amp; History</span>
   </div>
   <div class="stats-row"  id="statsRow"></div>
+  <div class="history-actions">
+    <button class="history-action-btn" id="exportBtn">📤 Export History</button>
+    <button class="history-action-btn" id="importBtn">📥 Import History</button>
+  </div>
   <div class="chart-wrap">
     <div class="chart-title">🏆 All-Time Wins</div>
     <div class="bar-row" id="barChart"></div>
@@ -377,11 +382,11 @@
 
 <script>
 const CARS = [
-  { id:'tesla', img:'assets/tesla.png',         name:'Tesla',       pts:1, color:'rgba(232,33,39,0.5)'  },
-  { id:'green', img:'assets/green-bean.png',    name:'Green Bean',  pts:2, color:'rgba(34,197,94,0.5)'  },
-  { id:'pink',  img:'assets/pink-panther.jpeg', name:'Pink Panther',pts:5, color:'rgba(255,105,180,0.5)'},
-  { id:'buggy', img:'assets/punch-buggy.jpeg',  name:'Punch Buggy', pts:3, color:'rgba(59,130,246,0.5)' },
-  { id:'mini',  img:'assets/mini.jpeg',          name:'Pinch Mini',  pts:2, color:'rgba(245,158,11,0.5)' },
+  { id:'tesla', img:'assets/tesla-t.png',         name:'Tesla',       pts:1, color:'rgba(232,33,39,0.5)'  },
+  { id:'green', img:'assets/green-bean-t.png',    name:'Green Bean',  pts:2, color:'rgba(34,197,94,0.5)'  },
+  { id:'pink',  img:'assets/pink-panther-t.png',  name:'Pink Panther',pts:5, color:'rgba(255,105,180,0.5)'},
+  { id:'buggy', img:'assets/punch-buggy-t.png',   name:'Punch Buggy', pts:3, color:'rgba(59,130,246,0.5)' },
+  { id:'mini',  img:'assets/mini-t.png',           name:'Pinch Mini',  pts:2, color:'rgba(245,158,11,0.5)' },
 ];
 const EMERGENCY = [
   { id:'police',    icon:'🚔', name:'Police'    },
@@ -452,6 +457,8 @@ function startGame() {
   state.selectedPlayer=names[0];
   state.startTime=Date.now();
   document.getElementById('firstScoreBar').style.display='';
+  // Request persistent storage so data survives browser cleanup on iOS
+  if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();
   renderGame(); startTimer(); showScreen('game');
 }
 
@@ -568,12 +575,25 @@ document.getElementById('modalOverlay').addEventListener('click',e=>{ if(e.targe
 let _audioCtx=null;
 function getAudioCtx(){
   if(!_audioCtx) _audioCtx=new(window.AudioContext||window.webkitAudioContext)();
-  if(_audioCtx.state==='suspended') _audioCtx.resume();
   return _audioCtx;
 }
+// iOS Safari: AudioContext starts suspended; must be resumed inside a user gesture.
+// We unlock it on first touch so subsequent playHonk calls work immediately.
+function unlockAudio(){
+  const ctx=getAudioCtx();
+  if(ctx.state==='suspended') ctx.resume();
+  // Play a silent buffer to fully unlock on older iOS
+  const buf=ctx.createBuffer(1,1,22050);
+  const src=ctx.createBufferSource(); src.buffer=buf;
+  src.connect(ctx.destination); src.start(0);
+}
+document.addEventListener('touchstart', unlockAudio, {once:true, passive:true});
+document.addEventListener('click',      unlockAudio, {once:true, passive:true});
+
 function playHonk(){
   try{
     const ctx=getAudioCtx();
+    if(ctx.state==='suspended') ctx.resume();
     [0,0.22].forEach(t=>{
       const osc=ctx.createOscillator(), g=ctx.createGain();
       osc.connect(g); g.connect(ctx.destination);
@@ -645,7 +665,7 @@ document.getElementById('gameoverBtn').addEventListener('click',()=>{
 function showFirstSpotCelebration(player,base,doubled,car){
   const card=document.getElementById('celebCard'); card.className='celeb-card first-spot';
   document.getElementById('celebBig').innerHTML=car.img
-    ?`<img src="${car.img}" style="width:56px;height:56px;object-fit:contain;border-radius:8px;">`
+    ?`<img src="${car.img}" style="width:64px;height:64px;object-fit:contain;">`
     :car.icon;
   document.getElementById('celebHeadline').textContent='🎯 FIRST SPOT!';
   document.getElementById('celebPlayer').textContent=player;
@@ -742,6 +762,33 @@ function showConfetti(){
     else canvas.style.display='none';
   })();
 }
+
+// ── Export / Import ──────────────────────────────
+document.getElementById('exportBtn').addEventListener('click',()=>{
+  loadHistory();
+  if(!state.history.length){showToast('No history to export!',true);return;}
+  const json=JSON.stringify(state.history);
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(json).then(()=>showToast('History copied to clipboard!')).catch(()=>fallbackExport(json));
+  } else { fallbackExport(json); }
+});
+function fallbackExport(json){
+  const a=document.createElement('a');
+  a.href='data:application/json;charset=utf-8,'+encodeURIComponent(json);
+  a.download='road-rivals-history.json'; a.click();
+}
+document.getElementById('importBtn').addEventListener('click',()=>{
+  const txt=prompt('Paste exported history JSON here:');
+  if(!txt) return;
+  try{
+    const data=JSON.parse(txt);
+    if(!Array.isArray(data)) throw new Error('Not an array');
+    const merged=[...data,...state.history.filter(g=>!data.find(d=>d.date===g.date))];
+    merged.sort((a,b)=>new Date(b.date)-new Date(a.date));
+    state.history=merged; saveHistory(); renderHistory();
+    showToast(`Imported ${data.length} game(s)!`);
+  }catch(e){ showToast('Invalid data — import failed',true); }
+});
 
 initSetup();
 </script>
